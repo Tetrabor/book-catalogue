@@ -133,7 +133,14 @@ export default function App() {
             )}
 
             {selectedBook && (
-              <BookForm selectedBook={selectedBook} scannedIsbn={scannedIsbn} uniqueLocations={uniqueLocations} onSave={handleSaveBook} onCancel={resetForm} />
+              <BookForm 
+                selectedBook={selectedBook} 
+                scannedIsbn={scannedIsbn} 
+                uniqueLocations={uniqueLocations} 
+                uploadCustomCover={uploadCustomCover}
+                onSave={handleSaveBook} 
+                onCancel={resetForm} 
+              />
             )}
           </div>
         )}

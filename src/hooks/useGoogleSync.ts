@@ -163,5 +163,83 @@ export function useGoogleSync(
     } catch (err) { console.error("Failed deletion sync", err); }
   };
 
-  return { googleToken, sheetId, syncStatus, userProfile, login, handleLogout, appendToCloud, deleteFromCloud };
+// --- NEW FEATURE: DRIVE IMAGE UPLOAD ---
+  
+  // 1. Find or create a specific folder for the book covers
+  const getOrCreateCoversFolder = async () => {
+    if (!googleToken) return null;
+    try {
+      const searchRes = await fetch("https://www.googleapis.com/drive/v3/files?q=name='Book Catalogue Covers' and mimeType='application/vnd.google-apps.folder' and trashed=false", {
+        headers: { Authorization: `Bearer ${googleToken}` }
+      });
+      const searchData = await searchRes.json();
+      
+      if (searchData.files && searchData.files.length > 0) {
+        return searchData.files[0].id; // Folder exists
+      }
+      
+      // Folder doesn't exist, create it
+      const createRes = await fetch("https://www.googleapis.com/drive/v3/files", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${googleToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Book Catalogue Covers",
+          mimeType: "application/vnd.google-apps.folder"
+        })
+      });
+      const createData = await createRes.json();
+      const folderId = createData.id;
+
+      // Make the folder publicly readable so the images render in the app
+      await fetch(`https://www.googleapis.com/drive/v3/files/${folderId}/permissions`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${googleToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "anyone", role: "reader" })
+      });
+
+      return folderId;
+    } catch (err) {
+      console.error("Failed to setup covers folder", err);
+      return null;
+    }
+  };
+
+  // 2. Upload the raw image file to that folder
+  const uploadCustomCover = async (file: File): Promise<string | null> => {
+    if (!googleToken) return null;
+    
+    setSyncStatus('Uploading cover image...');
+    const folderId = await getOrCreateCoversFolder();
+    if (!folderId) return null;
+
+    try {
+      // We have to use a special 'multipart' request to send files to Drive
+      const metadata = {
+        name: `cover_${Date.now()}_${file.name}`,
+        parents: [folderId]
+      };
+
+      const form = new FormData();
+      form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+      form.append('file', file);
+
+      const uploadRes = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink,webContentLink", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${googleToken}` }, // Do NOT set Content-Type here, let fetch handle the boundary
+        body: form
+      });
+      
+      const uploadData = await uploadRes.json();
+      setSyncStatus('Connected & Synced ✓');
+      
+      // Return the direct download link which works well for <img> tags
+      return uploadData.webContentLink; 
+    } catch (err) {
+      console.error("Failed to upload custom cover", err);
+      setSyncStatus('Upload Error');
+      return null;
+    }
+  };
+
+  return { googleToken, sheetId, syncStatus, userProfile, login, handleLogout, appendToCloud, deleteFromCloud, uploadCustomCover };
 }

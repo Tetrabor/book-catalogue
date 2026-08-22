@@ -1,20 +1,33 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { SavedBook } from '../types';
+import CoverVariantSelector from './CoverVariantSelector';
+import CustomCoverUpload from './CustomCoverUpload';
 
 interface BookFormProps {
   selectedBook: { title: string; author: string; coverUrl?: string };
   scannedIsbn: string | null;
   uniqueLocations: string[];
+  uploadCustomCover: (file: File) => Promise<string | null>; // New Prop
   onSave: (bookData: Omit<SavedBook, 'id' | 'dateAdded'>) => void;
   onCancel: () => void;
 }
 
-export default function BookForm({ selectedBook, scannedIsbn, uniqueLocations, onSave, onCancel }: BookFormProps) {
+export default function BookForm({ selectedBook, scannedIsbn, uniqueLocations, uploadCustomCover, onSave, onCancel }: BookFormProps) {
   const [edition, setEdition] = useState('');
   const [printRun, setPrintRun] = useState('1st');
   const [company, setCompany] = useState('');
   const [isSigned, setIsSigned] = useState(false);
   const [purchaseLocation, setPurchaseLocation] = useState('');
+  
+  // New States for Cover Variants
+  const [currentCoverUrl, setCurrentCoverUrl] = useState<string | undefined>(selectedBook.coverUrl);
+  const [isChangingCover, setIsChangingCover] = useState(false);
+
+  // If a new book is scanned, reset the cover
+  useEffect(() => {
+    setCurrentCoverUrl(selectedBook.coverUrl);
+    setIsChangingCover(false);
+  }, [selectedBook]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,7 +35,7 @@ export default function BookForm({ selectedBook, scannedIsbn, uniqueLocations, o
       title: selectedBook.title,
       author: selectedBook.author,
       isbn: scannedIsbn || 'N/A',
-      coverUrl: selectedBook.coverUrl,
+      coverUrl: currentCoverUrl, // Save the overridden cover!
       edition,
       printRun,
       company,
@@ -31,17 +44,54 @@ export default function BookForm({ selectedBook, scannedIsbn, uniqueLocations, o
     });
   };
 
+  const handleCoverUpdate = (newUrl: string) => {
+    setCurrentCoverUrl(newUrl);
+    setIsChangingCover(false);
+  };
+
   return (
     <form onSubmit={handleSubmit} style={{ border: '1px solid #ddd', padding: '20px', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
-      <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-        {selectedBook.coverUrl && <img src={selectedBook.coverUrl} alt="Cover" style={{ height: '90px', borderRadius: '4px' }} />}
-        <div>
-          <h3 style={{ margin: 0 }}>{selectedBook.title}</h3>
-          <p style={{ margin: '5px 0', color: '#666' }}>{selectedBook.author}</p>
+      
+      <div style={{ display: 'flex', gap: '15px', alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '90px' }}>
+          {currentCoverUrl ? (
+            <img src={currentCoverUrl} alt="Cover" style={{ width: '90px', borderRadius: '4px', objectFit: 'cover' }} />
+          ) : (
+             <div style={{ width: '90px', height: '130px', backgroundColor: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '4px', color: '#aaa', fontSize: '12px' }}>No Cover</div>
+          )}
+          <button 
+            type="button" 
+            onClick={() => setIsChangingCover(!isChangingCover)}
+            style={{ marginTop: '8px', fontSize: '11px', padding: '4px 8px', cursor: 'pointer', borderRadius: '4px', border: '1px solid #ccc', backgroundColor: '#fff' }}
+          >
+            Change Cover
+          </button>
+        </div>
+
+        <div style={{ flex: 1 }}>
+          <h3 style={{ margin: '0 0 5px 0' }}>{selectedBook.title}</h3>
+          <p style={{ margin: '0 0 5px 0', color: '#666' }}>{selectedBook.author}</p>
           <small style={{ color: '#888' }}>ISBN: {scannedIsbn}</small>
         </div>
       </div>
+
+      {/* RENDER THE HYBRID TOOLS IF THE USER CLICKS "CHANGE COVER" */}
+      {isChangingCover && (
+        <div style={{ border: '1px solid #ddd', borderRadius: '8px', padding: '10px' }}>
+          <CoverVariantSelector 
+            isbn={scannedIsbn || ''} 
+            onSelectCover={handleCoverUpdate} 
+            onCancel={() => setIsChangingCover(false)} 
+          />
+          <CustomCoverUpload 
+            uploadCustomCover={uploadCustomCover} 
+            onCoverUploaded={handleCoverUpdate} 
+          />
+        </div>
+      )}
+
       <hr style={{ border: 'none', borderTop: '1px solid #eee', width: '100%' }} />
+      
       <div>
         <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>Edition:</label>
         <input type="text" value={edition} onChange={(e) => setEdition(e.target.value)} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} />
