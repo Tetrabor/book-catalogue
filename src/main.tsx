@@ -1,7 +1,9 @@
 import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
+import { GoogleOAuthProvider } from '@react-oauth/google'
 
-// We removed <React.StrictMode> so the camera library doesn't get mounted twice
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
-  <App />
+  <GoogleOAuthProvider clientId="157106255137-9s254tcb00rp283u157rfou8b0viu49v.apps.googleusercontent.com">
+    <App />
+  </GoogleOAuthProvider>
 )
