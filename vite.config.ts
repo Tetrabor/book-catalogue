@@ -16,22 +16,24 @@ export default defineConfig({
         background_color: '#ffffff',
         display: 'standalone',
         icons: [
-          {
-            src: '/pwa-192x192.png',
-            sizes: '192x192',
-            type: 'image/png'
-          },
-          {
-            src: '/pwa-512x512.png',
-            sizes: '512x512',
-            type: 'image/png'
-          },
-          {
-            src: '/pwa-512x512-maskable.png',
-            sizes: '512x512',
-            type: 'image/png'
-            purpose: 'maskable'
-          }
+                  {
+                    src: '/pwa-192x192.png',
+                    sizes: '192x192',
+                    type: 'image/png',
+                    purpose: 'any' // "any" means this is the standard, unmasked icon
+                  },
+                  {
+                    src: '/pwa-512x512.png',
+                    sizes: '512x512',
+                    type: 'image/png',
+                    purpose: 'any'
+                  },
+                  {
+                    src: '/pwa-maskable-512x512.png',
+                    sizes: '512x512',
+                    type: 'image/png',
+                    purpose: 'maskable' // This tells Android/Chrome to use this for dynamic shapes
+                  }
         ]
       }
     })
