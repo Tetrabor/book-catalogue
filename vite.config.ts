@@ -9,8 +9,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       // This tells the app to act like a native app (hides the browser URL bar)
       manifest: {
-        name: 'Book Catalogue',
-        short_name: 'Catalogue',
+        name: "Ashlei's Bookshelf",
+        short_name: 'Bookshelf',
         description: 'Personal book scanning and cataloging app',
         theme_color: '#007bff',
         background_color: '#ffffff',
@@ -25,6 +25,12 @@ export default defineConfig({
             src: '/pwa-512x512.png',
             sizes: '512x512',
             type: 'image/png'
+          },
+          {
+            src: '/pwa-512x512-maskable.png',
+            sizes: '512x512',
+            type: 'image/png'
+            purpose: 'maskable'
           }
         ]
       }
