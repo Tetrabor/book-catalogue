@@ -35,7 +35,7 @@ export default function App() {
 
   // --- GOOGLE SHEETS STATE ---
   const [googleToken, setGoogleToken] = useState<string | null>(null);
-  const [sheetId, setSheetId] = useState<string | null>(localStorage.getItem('google_sheet_id'));
+  const [sheetId, setSheetId] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<string>('Not Connected');
 
   const [catalogue, setCatalogue] = useState<SavedBook[]>(() => {
@@ -43,9 +43,32 @@ export default function App() {
     return saved ? JSON.parse(saved) : [];
   });
 
+  // Save local catalogue changes
   useEffect(() => {
     localStorage.setItem('personal_book_catalogue', JSON.stringify(catalogue));
   }, [catalogue]);
+
+  // RESTORE GOOGLE SESSION ON REFRESH
+  useEffect(() => {
+    const savedToken = localStorage.getItem('google_access_token');
+    const tokenExpiry = localStorage.getItem('google_token_expiry');
+    const savedSheetId = localStorage.getItem('google_sheet_id');
+
+    // Google tokens last 1 hour. Check if it's still valid.
+    if (savedToken && tokenExpiry && Date.now() < parseInt(tokenExpiry)) {
+      setGoogleToken(savedToken);
+      if (savedSheetId) {
+        setSheetId(savedSheetId);
+        setSyncStatus('Connected & Synced ✓');
+        // Auto-pull data in the background to ensure device is up to date
+        pullFromGoogleSheet(savedToken, savedSheetId);
+      }
+    } else {
+      // Clean up expired tokens
+      localStorage.removeItem('google_access_token');
+      localStorage.removeItem('google_token_expiry');
+    }
+  }, []);
 
   const uniqueLocations = Array.from(new Set(catalogue.map(b => b.purchaseLocation).filter(Boolean)));
 
@@ -53,6 +76,11 @@ export default function App() {
   const handleGoogleLogin = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
       setGoogleToken(tokenResponse.access_token);
+      
+      // Save token and set expiration for 55 minutes from now
+      localStorage.setItem('google_access_token', tokenResponse.access_token);
+      localStorage.setItem('google_token_expiry', (Date.now() + 3300000).toString());
+      
       setSyncStatus('Connecting to Drive...');
       await initializeGoogleSheet(tokenResponse.access_token);
     },
@@ -61,7 +89,6 @@ export default function App() {
 
   const initializeGoogleSheet = async (token: string) => {
     try {
-      // 1. Check if the spreadsheet already exists in Drive
       const searchRes = await fetch("https://www.googleapis.com/drive/v3/files?q=name='My Book Catalogue' and trashed=false", {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -70,10 +97,8 @@ export default function App() {
       let currentSheetId = '';
 
       if (searchData.files && searchData.files.length > 0) {
-        // Sheet exists
         currentSheetId = searchData.files[0].id;
       } else {
-        // 2. Create the sheet if it doesn't exist
         setSyncStatus('Creating new spreadsheet...');
         const createRes = await fetch("https://sheets.googleapis.com/v4/spreadsheets", {
           method: "POST",
@@ -83,7 +108,6 @@ export default function App() {
         const createData = await createRes.json();
         currentSheetId = createData.spreadsheetId;
 
-        // Add headers to the new sheet
         await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${currentSheetId}/values/Sheet1!A1:I1?valueInputOption=USER_ENTERED`, {
           method: "PUT",
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -96,9 +120,52 @@ export default function App() {
       setSheetId(currentSheetId);
       localStorage.setItem('google_sheet_id', currentSheetId);
       setSyncStatus('Connected & Synced ✓');
+      
+      // Pull data so phone updates when you log in!
+      await pullFromGoogleSheet(token, currentSheetId);
+
     } catch (err) {
       console.error(err);
       setSyncStatus('Connection Error');
+    }
+  };
+
+  // NEW FEATURE: Pull data down from Google Sheets
+  const pullFromGoogleSheet = async (token: string, currentSheetId: string) => {
+    try {
+      const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${currentSheetId}/values/Sheet1!A2:I`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      
+      if (data.values) {
+        const fetchedBooks: SavedBook[] = data.values.map((row: any[], index: number) => ({
+          id: `google-${Date.now()}-${index}`,
+          title: row[0] || '',
+          author: row[1] || '',
+          isbn: row[2] || 'N/A',
+          edition: row[3] || '',
+          printRun: row[4] || '1st',
+          company: row[5] || '',
+          isSigned: row[6] === 'Yes',
+          purchaseLocation: row[7] || '',
+          dateAdded: row[8] || new Date().toLocaleDateString()
+        }));
+
+        // Merge cloud books with local books without duplicating
+        setCatalogue(prevCatalogue => {
+          const merged = [...prevCatalogue];
+          fetchedBooks.forEach(cloudBook => {
+            const alreadyExists = merged.some(localBook => localBook.title === cloudBook.title && localBook.isbn === cloudBook.isbn);
+            if (!alreadyExists) {
+              merged.push(cloudBook);
+            }
+          });
+          return merged;
+        });
+      }
+    } catch (err) {
+      console.error("Failed to pull from Google Sheets", err);
     }
   };
 
@@ -186,10 +253,8 @@ export default function App() {
       dateAdded: new Date().toLocaleDateString()
     };
 
-    // 1. Save locally
     setCatalogue([newBook, ...catalogue]);
     
-    // 2. Push to Google Sheets if logged in
     if (googleToken && sheetId) {
       await appendToGoogleSheet(newBook);
     }
@@ -209,7 +274,6 @@ export default function App() {
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif', maxWidth: '600px', margin: '0 auto' }}>
       
-      {/* GOOGLE SSO BANNER */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8f9fa', padding: '10px 15px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #ddd' }}>
         <div style={{ fontSize: '14px' }}>
           <strong>Google Sheets:</strong> {syncStatus}
