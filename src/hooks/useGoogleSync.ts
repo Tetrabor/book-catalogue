@@ -10,7 +10,6 @@ export function useGoogleSync(
   const [syncStatus, setSyncStatus] = useState<string>('Not Connected');
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
-  // Restore session on load
   useEffect(() => {
     const savedToken = localStorage.getItem('google_access_token');
     const tokenExpiry = localStorage.getItem('google_token_expiry');
@@ -83,11 +82,11 @@ export function useGoogleSync(
         const createData = await createRes.json();
         currentSheetId = createData.spreadsheetId;
 
-        await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${currentSheetId}/values/Sheet1!A1:I1?valueInputOption=USER_ENTERED`, {
+        await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${currentSheetId}/values/Sheet1!A1:L1?valueInputOption=USER_ENTERED`, {
           method: "PUT",
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
           body: JSON.stringify({
-            values: [["Title", "Author", "ISBN", "Edition", "Print Run", "Company", "Signed", "Location", "Date Added"]]
+            values: [["Title", "Author", "ISBN", "Edition", "Print Run", "Company", "Wet Signed", "Location", "Date Added", "Digital Signed", "Price", "Copies"]]
           })
         });
       }
@@ -103,7 +102,7 @@ export function useGoogleSync(
 
   const pullFromGoogleSheet = async (token: string, currentSheetId: string) => {
     try {
-      const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${currentSheetId}/values/Sheet1!A2:I`, {
+      const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${currentSheetId}/values/Sheet1!A2:L`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
@@ -113,7 +112,10 @@ export function useGoogleSync(
           title: row[0] || '', author: row[1] || '', isbn: row[2] || 'N/A',
           edition: row[3] || '', printRun: row[4] || '1st', company: row[5] || '',
           isSigned: row[6] === 'Yes', purchaseLocation: row[7] || '',
-          dateAdded: row[8] || new Date().toLocaleDateString()
+          dateAdded: row[8] || new Date().toLocaleDateString(),
+          isDigitalSigned: row[9] === 'Yes',
+          purchasePrice: row[10] || '',
+          copiesOwned: parseInt(row[11]) || 1
         }));
 
         setCatalogue(prevCatalogue => {
@@ -131,11 +133,15 @@ export function useGoogleSync(
   const appendToCloud = async (book: SavedBook) => {
     if (!googleToken || !sheetId) return;
     try {
-      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A1:I1:append?valueInputOption=USER_ENTERED`, {
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A1:L1:append?valueInputOption=USER_ENTERED`, {
         method: "POST",
         headers: { Authorization: `Bearer ${googleToken}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          values: [[ book.title, book.author, book.isbn, book.edition, book.printRun, book.company, book.isSigned ? "Yes" : "No", book.purchaseLocation, book.dateAdded ]]
+          values: [[ 
+            book.title, book.author, book.isbn, book.edition, book.printRun, book.company, 
+            book.isSigned ? "Yes" : "No", book.purchaseLocation, book.dateAdded,
+            book.isDigitalSigned ? "Yes" : "No", book.purchasePrice, book.copiesOwned
+          ]]
         })
       });
     } catch (err) { console.error("Failed to append", err); }
@@ -145,14 +151,16 @@ export function useGoogleSync(
     if (!googleToken || !sheetId) return;
     try {
       setSyncStatus('Syncing deletion...');
-      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A2:I:clear`, {
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A2:L:clear`, {
         method: "POST", headers: { Authorization: `Bearer ${googleToken}` }
       });
       if (updatedCatalogue.length > 0) {
         const values = updatedCatalogue.map(book => [
-          book.title, book.author, book.isbn, book.edition, book.printRun, book.company, book.isSigned ? "Yes" : "No", book.purchaseLocation, book.dateAdded
+          book.title, book.author, book.isbn, book.edition, book.printRun, book.company, 
+          book.isSigned ? "Yes" : "No", book.purchaseLocation, book.dateAdded,
+          book.isDigitalSigned ? "Yes" : "No", book.purchasePrice, book.copiesOwned
         ]);
-        await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A2:I?valueInputOption=USER_ENTERED`, {
+        await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A2:L?valueInputOption=USER_ENTERED`, {
           method: "PUT",
           headers: { Authorization: `Bearer ${googleToken}`, "Content-Type": "application/json" },
           body: JSON.stringify({ values })
@@ -162,79 +170,52 @@ export function useGoogleSync(
     } catch (err) { console.error("Failed deletion sync", err); }
   };
 
-// --- NEW FEATURE: DRIVE IMAGE UPLOAD ---
-  
-  // 1. Find or create a specific folder for the book covers
   const getOrCreateCoversFolder = async () => {
     if (!googleToken) return null;
     try {
-      const searchRes = await fetch("https://www.googleapis.com/drive/v3/files?q=name='Book Catalogue Covers' and mimeType='application/vnd.google-apps.folder' and trashed=false", {
-        headers: { Authorization: `Bearer ${googleToken}` }
-      });
+      const searchRes = await fetch("https://www.googleapis.com/drive/v3/files?q=name='Book Catalogue Covers' and mimeType='application/vnd.google-apps.folder' and trashed=false", { headers: { Authorization: `Bearer ${googleToken}` } });
       const searchData = await searchRes.json();
+      if (searchData.files && searchData.files.length > 0) return searchData.files[0].id;
       
-      if (searchData.files && searchData.files.length > 0) {
-        return searchData.files[0].id; // Folder exists
-      }
-      
-      // Folder doesn't exist, create it
       const createRes = await fetch("https://www.googleapis.com/drive/v3/files", {
         method: "POST",
         headers: { Authorization: `Bearer ${googleToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: "Book Catalogue Covers",
-          mimeType: "application/vnd.google-apps.folder"
-        })
+        body: JSON.stringify({ name: "Book Catalogue Covers", mimeType: "application/vnd.google-apps.folder" })
       });
       const createData = await createRes.json();
       const folderId = createData.id;
 
-      // Make the folder publicly readable so the images render in the app
       await fetch(`https://www.googleapis.com/drive/v3/files/${folderId}/permissions`, {
         method: "POST",
         headers: { Authorization: `Bearer ${googleToken}`, "Content-Type": "application/json" },
         body: JSON.stringify({ type: "anyone", role: "reader" })
       });
-
       return folderId;
-    } catch (err) {
-      console.error("Failed to setup covers folder", err);
-      return null;
-    }
+    } catch (err) { return null; }
   };
 
-  // 2. Upload the raw image file to that folder
   const uploadCustomCover = async (file: File): Promise<string | null> => {
     if (!googleToken) return null;
-    
     setSyncStatus('Uploading cover image...');
     const folderId = await getOrCreateCoversFolder();
     if (!folderId) return null;
 
     try {
-      // We have to use a special 'multipart' request to send files to Drive
-      const metadata = {
-        name: `cover_${Date.now()}_${file.name}`,
-        parents: [folderId]
-      };
-
+      const metadata = { name: `cover_${Date.now()}_${file.name}`, parents: [folderId] };
       const form = new FormData();
       form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
       form.append('file', file);
 
       const uploadRes = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink,webContentLink", {
         method: "POST",
-        headers: { Authorization: `Bearer ${googleToken}` }, // Do NOT set Content-Type here, let fetch handle the boundary
+        headers: { Authorization: `Bearer ${googleToken}` },
         body: form
       });
       
       const uploadData = await uploadRes.json();
       setSyncStatus('Connected & Synced ✓');
-      
-      // Return the direct download link which works well for <img> tags
       return uploadData.webContentLink; 
     } catch (err) {
-      console.error("Failed to upload custom cover", err);
       setSyncStatus('Upload Error');
       return null;
     }

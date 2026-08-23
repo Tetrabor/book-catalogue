@@ -8,6 +8,9 @@ export interface SavedBook {
   printRun: string;
   company: string;
   isSigned: boolean;
+  isDigitalSigned: boolean;
+  purchasePrice: string;
+  copiesOwned: number;
   purchaseLocation: string;
   dateAdded: string;
 }

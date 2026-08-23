@@ -26,7 +26,6 @@ export default function App() {
 
   const uniqueLocations = Array.from(new Set(catalogue.map(b => b.purchaseLocation).filter(Boolean)));
   
-  // Custom Hook replaces all the complex Google logic
   const { sheetId, syncStatus, userProfile, login, handleLogout, appendToCloud, deleteFromCloud, uploadCustomCover } = useGoogleSync(setCatalogue);
 
   const fetchBookDetails = async (isbn: string) => {
@@ -73,9 +72,14 @@ export default function App() {
 
   const handleExportCSV = () => {
     if (catalogue.length === 0) return;
-    const headers = ['Title', 'Author', 'ISBN', 'Edition', 'Print Run', 'Company', 'Signed', 'Location', 'Date Added'];
+    const headers = ['Title', 'Author', 'ISBN', 'Edition', 'Print Run', 'Company', 'Wet Signed', 'Location', 'Date Added', 'Digital Signed', 'Price', 'Copies'];
     const escapeCSV = (value: any) => value == null ? '""' : `"${String(value).replace(/"/g, '""')}"`;
-    const rows = catalogue.map(b => [ escapeCSV(b.title), escapeCSV(b.author), escapeCSV(b.isbn), escapeCSV(b.edition), escapeCSV(b.printRun), escapeCSV(b.company), escapeCSV(b.isSigned ? 'Yes' : 'No'), escapeCSV(b.purchaseLocation), escapeCSV(b.dateAdded) ].join(','));
+    const rows = catalogue.map(b => [ 
+      escapeCSV(b.title), escapeCSV(b.author), escapeCSV(b.isbn), escapeCSV(b.edition), 
+      escapeCSV(b.printRun), escapeCSV(b.company), escapeCSV(b.isSigned ? 'Yes' : 'No'), 
+      escapeCSV(b.purchaseLocation), escapeCSV(b.dateAdded),
+      escapeCSV(b.isDigitalSigned ? 'Yes' : 'No'), escapeCSV(b.purchasePrice), escapeCSV(b.copiesOwned)
+    ].join(','));
     const link = document.createElement('a');
     link.href = URL.createObjectURL(new Blob([[headers.join(','), ...rows].join('\n')], { type: 'text/csv;charset=utf-8;' }));
     link.setAttribute('download', `book-catalogue-${new Date().toISOString().split('T')[0]}.csv`);
@@ -133,20 +137,25 @@ export default function App() {
             )}
 
             {selectedBook && (
-              <BookForm 
-                selectedBook={selectedBook} 
-                scannedIsbn={scannedIsbn} 
-                uniqueLocations={uniqueLocations} 
-                uploadCustomCover={uploadCustomCover}
-                onSave={handleSaveBook} 
-                onCancel={resetForm} 
-              />
+              <BookForm selectedBook={selectedBook} scannedIsbn={scannedIsbn} uniqueLocations={uniqueLocations} uploadCustomCover={uploadCustomCover} onSave={handleSaveBook} onCancel={resetForm} />
             )}
           </div>
         )}
 
         {activeTab === 'catalogue' && (
-          <CatalogueList catalogue={catalogue} onDelete={handleDeleteBook} />
+          <CatalogueList 
+            catalogue={catalogue} 
+            onDelete={handleDeleteBook} 
+            onUpdate={async (updatedBook) => {
+              // 1. Update local state
+              const updatedCatalogue = catalogue.map(b => b.id === updatedBook.id ? updatedBook : b);
+              setCatalogue(updatedCatalogue);
+              // 2. Sync full update to cloud (reusing the delete function which completely overwrites the sheet)
+              await deleteFromCloud(updatedCatalogue);
+            }}
+            uniqueLocations={uniqueLocations}
+            uploadCustomCover={uploadCustomCover}
+          />
         )}
       </div>
     </div>
