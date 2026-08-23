@@ -3,7 +3,6 @@ import { useGoogleLogin } from '@react-oauth/google';
 import type { SavedBook, UserProfile } from '../types';
 
 export function useGoogleSync(
-  catalogue: SavedBook[],
   setCatalogue: React.Dispatch<React.SetStateAction<SavedBook[]>>
 ) {
   const [googleToken, setGoogleToken] = useState<string | null>(null);
