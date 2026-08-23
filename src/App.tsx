@@ -27,7 +27,7 @@ export default function App() {
   const uniqueLocations = Array.from(new Set(catalogue.map(b => b.purchaseLocation).filter(Boolean)));
   
   // Custom Hook replaces all the complex Google logic
-  const { sheetId, syncStatus, userProfile, login, handleLogout, appendToCloud, deleteFromCloud } = useGoogleSync(catalogue, setCatalogue);
+  const { sheetId, syncStatus, userProfile, login, handleLogout, appendToCloud, deleteFromCloud, uploadCustomCover } = useGoogleSync(catalogue, setCatalogue);
 
   const fetchBookDetails = async (isbn: string) => {
     setIsLoading(true); setError(null);
