@@ -7,35 +7,39 @@ interface BookFormProps {
   selectedBook: { title: string; author: string; coverUrl?: string };
   scannedIsbn: string | null;
   uniqueLocations: string[];
-  uploadCustomCover: (file: File) => Promise<string | null>; // New Prop
+  uploadCustomCover: (file: File) => Promise<string | null>;
   onSave: (bookData: Omit<SavedBook, 'id' | 'dateAdded'>) => void;
   onCancel: () => void;
 }
 
 export default function BookForm({ selectedBook, scannedIsbn, uniqueLocations, uploadCustomCover, onSave, onCancel }: BookFormProps) {
+  // We added a new local state to make the ISBN editable!
+  const [isbn, setIsbn] = useState('');
+  
   const [edition, setEdition] = useState('');
   const [printRun, setPrintRun] = useState('1st');
   const [company, setCompany] = useState('');
   const [isSigned, setIsSigned] = useState(false);
   const [purchaseLocation, setPurchaseLocation] = useState('');
   
-  // New States for Cover Variants
   const [currentCoverUrl, setCurrentCoverUrl] = useState<string | undefined>(selectedBook.coverUrl);
   const [isChangingCover, setIsChangingCover] = useState(false);
 
-  // If a new book is scanned, reset the cover
   useEffect(() => {
     setCurrentCoverUrl(selectedBook.coverUrl);
     setIsChangingCover(false);
-  }, [selectedBook]);
+    
+    // Pre-fill ISBN if the scanner found one, otherwise leave it blank for manual entry
+    setIsbn(scannedIsbn && scannedIsbn !== 'N/A' ? scannedIsbn : '');
+  }, [selectedBook, scannedIsbn]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSave({
       title: selectedBook.title,
       author: selectedBook.author,
-      isbn: scannedIsbn || 'N/A',
-      coverUrl: currentCoverUrl, // Save the overridden cover!
+      isbn: isbn || 'N/A', // Saves whatever you typed
+      coverUrl: currentCoverUrl, 
       edition,
       printRun,
       company,
@@ -53,33 +57,49 @@ export default function BookForm({ selectedBook, scannedIsbn, uniqueLocations, u
     <form onSubmit={handleSubmit} style={{ border: '1px solid #ddd', padding: '20px', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
       
       <div style={{ display: 'flex', gap: '15px', alignItems: 'flex-start' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '90px' }}>
+        
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '110px' }}>
           {currentCoverUrl ? (
-            <img src={currentCoverUrl} alt="Cover" style={{ width: '90px', borderRadius: '4px', objectFit: 'cover' }} />
+            <img src={currentCoverUrl} alt="Cover" style={{ width: '100%', borderRadius: '4px', objectFit: 'cover', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }} />
           ) : (
-             <div style={{ width: '90px', height: '130px', backgroundColor: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '4px', color: '#aaa', fontSize: '12px' }}>No Cover</div>
+             <div style={{ width: '100%', height: '150px', backgroundColor: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '4px', color: '#aaa', fontSize: '12px' }}>No Cover</div>
           )}
+          
           <button 
             type="button" 
             onClick={() => setIsChangingCover(!isChangingCover)}
-            style={{ marginTop: '8px', fontSize: '11px', padding: '4px 8px', cursor: 'pointer', borderRadius: '4px', border: '1px solid #ccc', backgroundColor: '#fff' }}
+            style={{ 
+              marginTop: '10px', fontSize: '12px', padding: '8px 0', cursor: 'pointer', borderRadius: '4px', border: '1px solid #007bff', 
+              backgroundColor: isChangingCover ? '#007bff' : '#f8f9fa', color: isChangingCover ? '#fff' : '#007bff', fontWeight: 'bold', width: '100%', transition: 'all 0.2s'
+            }}
           >
-            Change Cover
+            {isChangingCover ? 'Cancel' : 'Change Cover'}
           </button>
         </div>
 
         <div style={{ flex: 1 }}>
           <h3 style={{ margin: '0 0 5px 0' }}>{selectedBook.title}</h3>
           <p style={{ margin: '0 0 5px 0', color: '#666' }}>{selectedBook.author}</p>
-          <small style={{ color: '#888' }}>ISBN: {scannedIsbn}</small>
+          
+          {/* NEW EDITABLE ISBN FIELD */}
+          <div style={{ marginTop: '10px' }}>
+            <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '3px' }}>ISBN:</label>
+            <input 
+              type="text" 
+              value={isbn} 
+              onChange={(e) => setIsbn(e.target.value)} 
+              placeholder="Enter ISBN..." 
+              style={{ width: '100%', padding: '6px', fontSize: '13px', boxSizing: 'border-box', border: '1px solid #ccc', borderRadius: '4px' }} 
+            />
+          </div>
         </div>
       </div>
 
-      {/* RENDER THE HYBRID TOOLS IF THE USER CLICKS "CHANGE COVER" */}
       {isChangingCover && (
-        <div style={{ border: '1px solid #ddd', borderRadius: '8px', padding: '10px' }}>
+        <div style={{ border: '1px solid #ddd', borderRadius: '8px', padding: '10px', backgroundColor: '#fafafa' }}>
+          {/* We now pass the typed 'isbn' down to the variant selector! */}
           <CoverVariantSelector 
-            isbn={scannedIsbn || ''} 
+            isbn={isbn} 
             onSelectCover={handleCoverUpdate} 
             onCancel={() => setIsChangingCover(false)} 
           />
