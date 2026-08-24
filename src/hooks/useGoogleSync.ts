@@ -11,7 +11,6 @@ export function useGoogleSync(
   const [syncStatus, setSyncStatus] = useState<string>('Not Connected');
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
-  // We use a ref to ensure our sync functions always see the absolute latest catalogue state
   const catRef = useRef<SavedBook[]>(catalogue);
   useEffect(() => { catRef.current = catalogue; }, [catalogue]);
 
@@ -28,7 +27,6 @@ export function useGoogleSync(
       setGoogleToken(savedToken);
       if (savedSheetId) runSmartSync(savedToken, savedSheetId);
     } else if (savedProfile) {
-      // UX FIX: Token expired, but keep the profile visually loaded!
       setGoogleToken(null);
       setSyncStatus('Session Expired');
     }
@@ -87,7 +85,6 @@ export function useGoogleSync(
         const createData = await createRes.json();
         currentSheetId = createData.spreadsheetId;
 
-        // Note: Adding LastModified and the Timestamp to M1 and N1
         await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${currentSheetId}/values/Sheet1!A1:N1?valueInputOption=USER_ENTERED`, {
           method: "PUT",
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -117,7 +114,6 @@ export function useGoogleSync(
       const localTs = parseInt(localStorage.getItem('catalogue_last_modified') || '0');
 
       if (cloudTs > localTs) {
-        // CLOUD IS NEWER -> Overwrite Local
         if (data.values && data.values.length > 1) {
           const fetchedBooks: SavedBook[] = data.values.slice(1).map((row: any[], index: number) => ({
             id: `google-${cloudTs}-${index}`, 
@@ -137,10 +133,8 @@ export function useGoogleSync(
         setSyncStatus('Connected & Synced ✓');
 
       } else if (localTs > cloudTs) {
-        // LOCAL IS NEWER -> Overwrite Cloud
         await forcePushToCloud(catRef.current, localTs, token, sheet);
       } else {
-        // Perfect Sync
         setSyncStatus('Connected & Synced ✓');
       }
     } catch (err) {
@@ -165,10 +159,20 @@ export function useGoogleSync(
       const values = [headers];
 
       cat.forEach(book => {
+        // FIX: Added ultra-safe fallbacks for every single property so older data schemas never crash the app
         values.push([
-          book.title, book.author, book.isbn, book.edition, book.printRun, book.company, 
-          book.isSigned ? "Yes" : "No", book.purchaseLocation, book.dateAdded,
-          book.isDigitalSigned ? "Yes" : "No", book.purchasePrice, book.copiesOwned.toString()
+          book.title || '', 
+          book.author || '', 
+          book.isbn || 'N/A', 
+          book.edition || '', 
+          book.printRun || '1st', 
+          book.company || '', 
+          book.isSigned ? "Yes" : "No", 
+          book.purchaseLocation || '', 
+          book.dateAdded || new Date().toLocaleDateString(),
+          book.isDigitalSigned ? "Yes" : "No", 
+          book.purchasePrice || '', 
+          String(book.copiesOwned || 1) // The critical fix
         ]);
       });
 
