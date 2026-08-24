@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useGoogleLogin } from '@react-oauth/google';
 import type { SavedBook, UserProfile } from '../types';
 
 export function useGoogleSync(
+  catalogue: SavedBook[],
   setCatalogue: React.Dispatch<React.SetStateAction<SavedBook[]>>
 ) {
   const [googleToken, setGoogleToken] = useState<string | null>(null);
@@ -10,23 +11,26 @@ export function useGoogleSync(
   const [syncStatus, setSyncStatus] = useState<string>('Not Connected');
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
+  // We use a ref to ensure our sync functions always see the absolute latest catalogue state
+  const catRef = useRef<SavedBook[]>(catalogue);
+  useEffect(() => { catRef.current = catalogue; }, [catalogue]);
+
   useEffect(() => {
     const savedToken = localStorage.getItem('google_access_token');
     const tokenExpiry = localStorage.getItem('google_token_expiry');
     const savedSheetId = localStorage.getItem('google_sheet_id');
     const savedProfile = localStorage.getItem('google_user_profile');
 
+    if (savedProfile) setUserProfile(JSON.parse(savedProfile));
+    if (savedSheetId) setSheetId(savedSheetId);
+
     if (savedToken && tokenExpiry && Date.now() < parseInt(tokenExpiry)) {
       setGoogleToken(savedToken);
-      if (savedProfile) setUserProfile(JSON.parse(savedProfile));
-      
-      if (savedSheetId) {
-        setSheetId(savedSheetId);
-        setSyncStatus('Connected & Synced ✓');
-        pullFromGoogleSheet(savedToken, savedSheetId);
-      }
-    } else {
-      handleLogout();
+      if (savedSheetId) runSmartSync(savedToken, savedSheetId);
+    } else if (savedProfile) {
+      // UX FIX: Token expired, but keep the profile visually loaded!
+      setGoogleToken(null);
+      setSyncStatus('Session Expired');
     }
   }, []);
 
@@ -37,6 +41,7 @@ export function useGoogleSync(
     localStorage.removeItem('google_token_expiry');
     localStorage.removeItem('google_sheet_id');
     localStorage.removeItem('google_user_profile');
+    localStorage.removeItem('catalogue_last_modified');
   };
 
   const login = useGoogleLogin({
@@ -82,105 +87,123 @@ export function useGoogleSync(
         const createData = await createRes.json();
         currentSheetId = createData.spreadsheetId;
 
-        await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${currentSheetId}/values/Sheet1!A1:L1?valueInputOption=USER_ENTERED`, {
+        // Note: Adding LastModified and the Timestamp to M1 and N1
+        await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${currentSheetId}/values/Sheet1!A1:N1?valueInputOption=USER_ENTERED`, {
           method: "PUT",
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
           body: JSON.stringify({
-            values: [["Title", "Author", "ISBN", "Edition", "Print Run", "Company", "Wet Signed", "Location", "Date Added", "Digital Signed", "Price", "Copies"]]
+            values: [["Title", "Author", "ISBN", "Edition", "Print Run", "Company", "Wet Signed", "Location", "Date Added", "Digital Signed", "Price", "Copies", "LastModified", Date.now().toString()]]
           })
         });
       }
       setSheetId(currentSheetId);
       localStorage.setItem('google_sheet_id', currentSheetId);
-      setSyncStatus('Connected & Synced ✓');
-      await pullFromGoogleSheet(token, currentSheetId);
+      await runSmartSync(token, currentSheetId);
     } catch (err) {
       console.error(err);
       setSyncStatus('Connection Error');
     }
   };
 
-  const pullFromGoogleSheet = async (token: string, currentSheetId: string) => {
+  const runSmartSync = async (token: string, sheet: string) => {
+    setSyncStatus('Syncing devices...');
     try {
-      const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${currentSheetId}/values/Sheet1!A2:L`, {
-        headers: { Authorization: `Bearer ${token}` }
+      const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheet}/values/Sheet1!A1:N`, { 
+        headers: { Authorization: `Bearer ${token}` } 
       });
       const data = await res.json();
-      if (data.values) {
-        const fetchedBooks: SavedBook[] = data.values.map((row: any[], index: number) => ({
-          id: `google-${Date.now()}-${index}`,
-          title: row[0] || '', author: row[1] || '', isbn: row[2] || 'N/A',
-          edition: row[3] || '', printRun: row[4] || '1st', company: row[5] || '',
-          isSigned: row[6] === 'Yes', purchaseLocation: row[7] || '',
-          dateAdded: row[8] || new Date().toLocaleDateString(),
-          isDigitalSigned: row[9] === 'Yes',
-          purchasePrice: row[10] || '',
-          copiesOwned: parseInt(row[11]) || 1
-        }));
 
-        setCatalogue(prevCatalogue => {
-          const merged = [...prevCatalogue];
-          fetchedBooks.forEach(cloudBook => {
-            const alreadyExists = merged.some(localBook => localBook.title === cloudBook.title && localBook.isbn === cloudBook.isbn);
-            if (!alreadyExists) merged.push(cloudBook);
-          });
-          return merged;
-        });
+      const cloudTs = (data.values && data.values[0] && data.values[0][13]) ? parseInt(data.values[0][13]) : 0;
+      const localTs = parseInt(localStorage.getItem('catalogue_last_modified') || '0');
+
+      if (cloudTs > localTs) {
+        // CLOUD IS NEWER -> Overwrite Local
+        if (data.values && data.values.length > 1) {
+          const fetchedBooks: SavedBook[] = data.values.slice(1).map((row: any[], index: number) => ({
+            id: `google-${cloudTs}-${index}`, 
+            title: row[0] || '', author: row[1] || '', isbn: row[2] || 'N/A',
+            edition: row[3] || '', printRun: row[4] || '1st', company: row[5] || '',
+            isSigned: row[6] === 'Yes', purchaseLocation: row[7] || '',
+            dateAdded: row[8] || new Date().toLocaleDateString(),
+            isDigitalSigned: row[9] === 'Yes',
+            purchasePrice: row[10] || '',
+            copiesOwned: parseInt(row[11]) || 1
+          }));
+          setCatalogue(fetchedBooks);
+        } else {
+          setCatalogue([]);
+        }
+        localStorage.setItem('catalogue_last_modified', cloudTs.toString());
+        setSyncStatus('Connected & Synced ✓');
+
+      } else if (localTs > cloudTs) {
+        // LOCAL IS NEWER -> Overwrite Cloud
+        await forcePushToCloud(catRef.current, localTs, token, sheet);
+      } else {
+        // Perfect Sync
+        setSyncStatus('Connected & Synced ✓');
       }
-    } catch (err) { console.error("Failed to pull from Google Sheets", err); }
+    } catch (err) {
+      console.error("Smart Sync Failed", err);
+      setSyncStatus('Sync Error');
+    }
   };
 
-  const appendToCloud = async (book: SavedBook) => {
-    if (!googleToken || !sheetId) return;
+  const forcePushToCloud = async (cat: SavedBook[], ts: number, tokenOverride?: string, sheetOverride?: string) => {
+    const activeToken = tokenOverride || googleToken;
+    const activeSheet = sheetOverride || sheetId;
+    
+    if (!activeToken || !activeSheet) return;
+    setSyncStatus('Saving to cloud...');
+    
     try {
-      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A1:L1:append?valueInputOption=USER_ENTERED`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${googleToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          values: [[ 
-            book.title, book.author, book.isbn, book.edition, book.printRun, book.company, 
-            book.isSigned ? "Yes" : "No", book.purchaseLocation, book.dateAdded,
-            book.isDigitalSigned ? "Yes" : "No", book.purchasePrice, book.copiesOwned
-          ]]
-        })
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${activeSheet}/values/Sheet1!A1:N:clear`, { 
+        method: "POST", headers: { Authorization: `Bearer ${activeToken}` } 
       });
-    } catch (err) { console.error("Failed to append", err); }
-  };
 
-  const deleteFromCloud = async (updatedCatalogue: SavedBook[]) => {
-    if (!googleToken || !sheetId) return;
-    try {
-      setSyncStatus('Syncing deletion...');
-      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A2:L:clear`, {
-        method: "POST", headers: { Authorization: `Bearer ${googleToken}` }
-      });
-      if (updatedCatalogue.length > 0) {
-        const values = updatedCatalogue.map(book => [
+      const headers = ["Title", "Author", "ISBN", "Edition", "Print Run", "Company", "Wet Signed", "Location", "Date Added", "Digital Signed", "Price", "Copies", "LastModified", ts.toString()];
+      const values = [headers];
+
+      cat.forEach(book => {
+        values.push([
           book.title, book.author, book.isbn, book.edition, book.printRun, book.company, 
           book.isSigned ? "Yes" : "No", book.purchaseLocation, book.dateAdded,
-          book.isDigitalSigned ? "Yes" : "No", book.purchasePrice, book.copiesOwned
+          book.isDigitalSigned ? "Yes" : "No", book.purchasePrice, book.copiesOwned.toString()
         ]);
-        await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A2:L?valueInputOption=USER_ENTERED`, {
-          method: "PUT",
-          headers: { Authorization: `Bearer ${googleToken}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ values })
-        });
-      }
+      });
+
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${activeSheet}/values/Sheet1!A1:N?valueInputOption=USER_ENTERED`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${activeToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ values })
+      });
+      
       setSyncStatus('Connected & Synced ✓');
-    } catch (err) { console.error("Failed deletion sync", err); }
+    } catch (err) {
+      console.error(err);
+      setSyncStatus('Sync Error');
+    }
   };
 
   const getOrCreateCoversFolder = async () => {
     if (!googleToken) return null;
     try {
-      const searchRes = await fetch("https://www.googleapis.com/drive/v3/files?q=name='Book Catalogue Covers' and mimeType='application/vnd.google-apps.folder' and trashed=false", { headers: { Authorization: `Bearer ${googleToken}` } });
+      const searchRes = await fetch("https://www.googleapis.com/drive/v3/files?q=name='Book Catalogue Covers' and mimeType='application/vnd.google-apps.folder' and trashed=false", {
+        headers: { Authorization: `Bearer ${googleToken}` }
+      });
       const searchData = await searchRes.json();
-      if (searchData.files && searchData.files.length > 0) return searchData.files[0].id;
+      
+      if (searchData.files && searchData.files.length > 0) {
+        return searchData.files[0].id;
+      }
       
       const createRes = await fetch("https://www.googleapis.com/drive/v3/files", {
         method: "POST",
         headers: { Authorization: `Bearer ${googleToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ name: "Book Catalogue Covers", mimeType: "application/vnd.google-apps.folder" })
+        body: JSON.stringify({
+          name: "Book Catalogue Covers",
+          mimeType: "application/vnd.google-apps.folder"
+        })
       });
       const createData = await createRes.json();
       const folderId = createData.id;
@@ -190,36 +213,47 @@ export function useGoogleSync(
         headers: { Authorization: `Bearer ${googleToken}`, "Content-Type": "application/json" },
         body: JSON.stringify({ type: "anyone", role: "reader" })
       });
+
       return folderId;
-    } catch (err) { return null; }
+    } catch (err) {
+      console.error("Failed to setup covers folder", err);
+      return null;
+    }
   };
 
   const uploadCustomCover = async (file: File): Promise<string | null> => {
     if (!googleToken) return null;
+    
     setSyncStatus('Uploading cover image...');
     const folderId = await getOrCreateCoversFolder();
     if (!folderId) return null;
 
     try {
-      const metadata = { name: `cover_${Date.now()}_${file.name}`, parents: [folderId] };
+      const metadata = {
+        name: `cover_${Date.now()}_${file.name}`,
+        parents: [folderId]
+      };
+
       const form = new FormData();
       form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
       form.append('file', file);
 
       const uploadRes = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink,webContentLink", {
         method: "POST",
-        headers: { Authorization: `Bearer ${googleToken}` },
+        headers: { Authorization: `Bearer ${googleToken}` }, 
         body: form
       });
       
       const uploadData = await uploadRes.json();
       setSyncStatus('Connected & Synced ✓');
+      
       return uploadData.webContentLink; 
     } catch (err) {
+      console.error("Failed to upload custom cover", err);
       setSyncStatus('Upload Error');
       return null;
     }
   };
 
-  return { googleToken, sheetId, syncStatus, userProfile, login, handleLogout, appendToCloud, deleteFromCloud, uploadCustomCover };
+  return { googleToken, sheetId, syncStatus, userProfile, login, handleLogout, forcePushToCloud, uploadCustomCover, getOrCreateCoversFolder };
 }

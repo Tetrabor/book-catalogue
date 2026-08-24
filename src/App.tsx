@@ -26,7 +26,36 @@ export default function App() {
 
   const uniqueLocations = Array.from(new Set(catalogue.map(b => b.purchaseLocation).filter(Boolean)));
   
-  const { sheetId, syncStatus, userProfile, login, handleLogout, appendToCloud, deleteFromCloud, uploadCustomCover } = useGoogleSync(setCatalogue);
+  // Notice we added catalogue back to the arguments here!
+  const { googleToken, sheetId, syncStatus, userProfile, login, handleLogout, forcePushToCloud, uploadCustomCover } = useGoogleSync(catalogue, setCatalogue);
+
+  // NEW: The universal data wrapper
+  const updateCatalogueAndSync = (newCatalogue: SavedBook[]) => {
+    const newTimestamp = Date.now();
+    localStorage.setItem('catalogue_last_modified', newTimestamp.toString());
+    setCatalogue(newCatalogue);
+    
+    if (googleToken && sheetId) {
+      forcePushToCloud(newCatalogue, newTimestamp);
+    }
+  };
+
+  const handleSaveBook = (bookData: Omit<SavedBook, 'id' | 'dateAdded'>) => {
+    const newBook = { ...bookData, id: Date.now().toString(), dateAdded: new Date().toLocaleDateString() };
+    updateCatalogueAndSync([newBook, ...catalogue]);
+    resetForm(); 
+    setActiveTab('catalogue');
+  };
+
+  const handleUpdateBook = (updatedBook: SavedBook) => {
+    const newCat = catalogue.map(b => b.id === updatedBook.id ? updatedBook : b);
+    updateCatalogueAndSync(newCat);
+  };
+
+  const handleDeleteBook = (id: string) => {
+    const newCat = catalogue.filter(b => b.id !== id);
+    updateCatalogueAndSync(newCat);
+  };
 
   const fetchBookDetails = async (isbn: string) => {
     setIsLoading(true); setError(null);
@@ -55,19 +84,6 @@ export default function App() {
     setSearchResults([]); setSearchQuery('');
   };
 
-  const handleSaveBook = async (bookData: Omit<SavedBook, 'id' | 'dateAdded'>) => {
-    const newBook = { ...bookData, id: Date.now().toString(), dateAdded: new Date().toLocaleDateString() };
-    setCatalogue([newBook, ...catalogue]);
-    await appendToCloud(newBook);
-    resetForm(); setActiveTab('catalogue');
-  };
-
-  const handleDeleteBook = async (id: string) => {
-    const updated = catalogue.filter(b => b.id !== id);
-    setCatalogue(updated);
-    await deleteFromCloud(updated);
-  };
-
   const resetForm = () => { setScannedIsbn(null); setSelectedBook(null); setError(null); setSearchResults([]); };
 
   const handleExportCSV = () => {
@@ -88,13 +104,20 @@ export default function App() {
 
   return (
     <div style={{ fontFamily: 'sans-serif', maxWidth: '600px', margin: '0 auto' }}>
-      <SidebarMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} userProfile={userProfile} syncStatus={syncStatus} sheetId={sheetId} onLogin={() => login()} onLogout={handleLogout} onExport={handleExportCSV} />
+      <SidebarMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} userProfile={userProfile} syncStatus={syncStatus} sheetId={sheetId} googleToken={googleToken} onLogin={() => login()} onLogout={handleLogout} onExport={handleExportCSV} />
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 20px', backgroundColor: '#f8f9fa', borderBottom: '1px solid #ddd' }}>
         <button onClick={() => setIsMenuOpen(true)} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', padding: '5px' }}>☰</button>
         <h1 style={{ margin: 0, fontSize: '20px' }}>Book Catalogue</h1>
         <div style={{ width: '32px', height: '32px' }}>{userProfile && <img src={userProfile.picture} alt="Profile" style={{ width: '32px', height: '32px', borderRadius: '50%' }} />}</div>
       </div>
+
+      {/* NEW: Reconnect Banner if token expired */}
+      {!googleToken && userProfile && (
+        <div style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '10px', textAlign: 'center', fontSize: '13px', cursor: 'pointer', borderBottom: '1px solid #ffeeba' }} onClick={() => login()}>
+          <strong>Session Expired:</strong> Click here to reconnect to Google Sync.
+        </div>
+      )}
 
       <div style={{ padding: '20px' }}>
         <div style={{ display: 'flex', borderBottom: '2px solid #ddd', marginBottom: '20px' }}>
@@ -143,19 +166,7 @@ export default function App() {
         )}
 
         {activeTab === 'catalogue' && (
-          <CatalogueList 
-            catalogue={catalogue} 
-            onDelete={handleDeleteBook} 
-            onUpdate={async (updatedBook) => {
-              // 1. Update local state
-              const updatedCatalogue = catalogue.map(b => b.id === updatedBook.id ? updatedBook : b);
-              setCatalogue(updatedCatalogue);
-              // 2. Sync full update to cloud (reusing the delete function which completely overwrites the sheet)
-              await deleteFromCloud(updatedCatalogue);
-            }}
-            uniqueLocations={uniqueLocations}
-            uploadCustomCover={uploadCustomCover}
-          />
+          <CatalogueList catalogue={catalogue} onDelete={handleDeleteBook} onUpdate={handleUpdateBook} uniqueLocations={uniqueLocations} uploadCustomCover={uploadCustomCover} />
         )}
       </div>
     </div>

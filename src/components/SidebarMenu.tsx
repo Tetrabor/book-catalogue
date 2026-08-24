@@ -6,12 +6,13 @@ interface SidebarProps {
   userProfile: UserProfile | null;
   syncStatus: string;
   sheetId: string | null;
+  googleToken: string | null;
   onLogin: () => void;
   onLogout: () => void;
   onExport: () => void;
 }
 
-export default function SidebarMenu({ isOpen, onClose, userProfile, syncStatus, sheetId, onLogin, onLogout, onExport }: SidebarProps) {
+export default function SidebarMenu({ isOpen, onClose, userProfile, syncStatus, sheetId, googleToken, onLogin, onLogout, onExport }: SidebarProps) {
   if (!isOpen) return null;
 
   return (
@@ -22,19 +23,30 @@ export default function SidebarMenu({ isOpen, onClose, userProfile, syncStatus, 
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer' }}>✕</button>
         </div>
         <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px', flex: 1 }}>
+          
           {userProfile ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', paddingBottom: '15px', borderBottom: '1px solid #eee' }}>
-              <img src={userProfile.picture} alt="Profile" style={{ width: '40px', height: '40px', borderRadius: '50%' }} />
-              <div style={{ flex: 1 }}>
-                <p style={{ margin: 0, fontWeight: 'bold' }}>{userProfile.name}</p>
-                <p style={{ margin: 0, fontSize: '12px', color: '#666' }}>{syncStatus}</p>
+            <div style={{ paddingBottom: '15px', borderBottom: '1px solid #eee' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '10px' }}>
+                <img src={userProfile.picture} alt="Profile" style={{ width: '40px', height: '40px', borderRadius: '50%' }} />
+                <div style={{ flex: 1 }}>
+                  <p style={{ margin: 0, fontWeight: 'bold' }}>{userProfile.name}</p>
+                  <p style={{ margin: 0, fontSize: '12px', color: '#666' }}>{syncStatus}</p>
+                </div>
               </div>
+              
+              {/* NEW: Reconnect Button if token expired but profile exists */}
+              {!googleToken && (
+                <button onClick={onLogin} style={{ width: '100%', padding: '8px', backgroundColor: '#4285F4', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>
+                  ↻ Reconnect Sync
+                </button>
+              )}
             </div>
           ) : (
             <button onClick={onLogin} style={{ padding: '12px', backgroundColor: '#4285F4', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
               Sign in with Google
             </button>
           )}
+
           {sheetId && (
             <a href={`https://docs.google.com/spreadsheets/d/${sheetId}/edit`} target="_blank" rel="noopener noreferrer" style={{ padding: '12px', backgroundColor: '#e9ecef', color: '#333', textDecoration: 'none', borderRadius: '4px', textAlign: 'center', fontWeight: 'bold', display: 'block' }}>
               📄 Open Master Spreadsheet
@@ -44,6 +56,7 @@ export default function SidebarMenu({ isOpen, onClose, userProfile, syncStatus, 
             📥 Export CSV Backup
           </button>
         </div>
+        
         {userProfile && (
           <div style={{ padding: '20px', borderTop: '1px solid #eee' }}>
             <button onClick={onLogout} style={{ width: '100%', padding: '12px', backgroundColor: '#fff', color: '#dc3545', border: '1px solid #dc3545', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
