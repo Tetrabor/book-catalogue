@@ -12,10 +12,7 @@ export default function App() {
   const [inputMode, setInputMode] = useState<'scanner' | 'manual'>('scanner');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<any[]>([]);
   const [scannedIsbn, setScannedIsbn] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [selectedBook, setSelectedBook] = useState<{ title: string; author: string; coverUrl?: string } | null>(null);
   const [activeBookId, setActiveBookId] = useState<string | null>(null);
 
@@ -46,33 +43,44 @@ export default function App() {
   const handleDeleteBook = (id: string) => updateCatalogueAndSync(catalogue.filter(b => b.id !== id));
 
   const fetchBookDetails = async (isbn: string) => {
-    setIsLoading(true); setError(null);
     try {
       const response = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`);
       const data = await response.json();
       if (data[`ISBN:${isbn}`]) {
         const item = data[`ISBN:${isbn}`];
         setSelectedBook({ title: item.title, author: item.authors ? item.authors.map((a:any) => a.name).join(', ') : 'Unknown Author', coverUrl: item.cover?.medium });
-      } else setError("Book not found. Try manual search.");
-    } catch (err) { setError("Network error fetching details."); } finally { setIsLoading(false); }
+      } else {
+        setSelectedBook({ title: "Unknown Book", author: "Unknown Author" });
+      }
+    } catch (err) { 
+      console.error("Network error fetching details.", err); 
+    }
   };
 
   const handleManualSearch = async (e: React.FormEvent) => {
-    e.preventDefault(); setIsLoading(true); setError(null); setSearchResults([]);
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
     try {
-      const response = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(searchQuery)}&limit=5`);
+      const response = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(searchQuery)}&limit=1`);
       const data = await response.json();
-      if (data.docs && data.docs.length > 0) setSearchResults(data.docs); else setError("No matching books found.");
-    } catch (err) { setError("Network error."); } finally { setIsLoading(false); }
+      if (data.docs && data.docs.length > 0) {
+        const book = data.docs[0];
+        setSelectedBook({ 
+          title: book.title, 
+          author: book.author_name ? book.author_name.join(', ') : 'Unknown Author', 
+          coverUrl: book.cover_i ? `https://covers.openlibrary.org/b/id/${book.cover_i}-M.jpg` : undefined 
+        });
+        setScannedIsbn(book.isbn ? book.isbn[0] : 'N/A');
+        setSearchQuery('');
+      } else {
+        alert("No matching books found.");
+      }
+    } catch (err) { 
+      console.error("Network error.", err); 
+    }
   };
 
-  const selectSearchResult = (book: any) => {
-    setSelectedBook({ title: book.title, author: book.author_name ? book.author_name.join(', ') : 'Unknown', coverUrl: book.cover_i ? `https://covers.openlibrary.org/b/id/${book.cover_i}-M.jpg` : undefined });
-    setScannedIsbn(book.isbn ? book.isbn[0] : 'N/A');
-    setSearchResults([]); setSearchQuery('');
-  };
-
-  const resetForm = () => { setScannedIsbn(null); setSelectedBook(null); setError(null); setSearchResults([]); };
+  const resetForm = () => { setScannedIsbn(null); setSelectedBook(null); setSearchQuery(''); };
 
   const handleExportCSV = () => {
     if (catalogue.length === 0) return;
@@ -85,9 +93,8 @@ export default function App() {
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
-  // NEW: Dark Mode Glassmorphism
   const glassStyle: React.CSSProperties = {
-    backgroundColor: 'rgba(29, 42, 58, 0.80)', // Dark Theme Billy Blue
+    backgroundColor: 'rgba(29, 42, 58, 0.80)',
     backdropFilter: 'blur(12px)',
     WebkitBackdropFilter: 'blur(12px)',
     borderRadius: '8px',
@@ -103,7 +110,6 @@ export default function App() {
 
       <div style={{ maxWidth: '600px', margin: '0 auto' }}>
         
-        {/* NEW: Compact Dark Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 15px', backgroundColor: 'rgba(29, 42, 58, 0.95)', backdropFilter: 'blur(10px)', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}>
           <button onClick={() => setIsMenuOpen(true)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', padding: '4px', color: '#fff' }}>☰</button>
           <h1 style={{ margin: 0, fontSize: '18px', letterSpacing: '0.5px' }}>Book Catalogue</h1>
