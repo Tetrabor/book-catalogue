@@ -3,39 +3,45 @@ import { getBookThickness } from './useSeededStyle';
 import type { SavedBook } from '../types';
 
 export function useBookPagination(catalogue: SavedBook[]) {
-  // We store an array of arrays. Each inner array is a single shelf.
   const [shelves, setShelves] = useState<SavedBook[][]>([]);
 
   useEffect(() => {
     const calculateShelves = () => {
-      // Get available screen width, subtracting 40px for padding on the edges
       const containerWidth = window.innerWidth - 40; 
       
+      // NEW: Sort the books! Series books group together, non-series go to the end.
+      const sortedCatalogue = [...catalogue].sort((a, b) => {
+        if (a.series && b.series) {
+          const cmp = a.series.localeCompare(b.series);
+          // If they are in the same series, optionally sort by title inside it
+          if (cmp === 0) return a.title.localeCompare(b.title);
+          return cmp;
+        } else if (a.series) {
+          return -1; // Push series books to the front
+        } else if (b.series) {
+          return 1;
+        }
+        return 0; // Maintain natural order for non-series
+      });
+
       const newShelves: SavedBook[][] = [];
       let currentShelf: SavedBook[] = [];
       let currentWidth = 0;
 
-      catalogue.forEach(book => {
-        // Find the exact width of this specific book, plus a 2px gap between books
+      sortedCatalogue.forEach(book => {
         const thickness = getBookThickness(book.id) + 2; 
 
-        // If this book pushes us over the edge, save the shelf and start a new one
         if (currentWidth + thickness > containerWidth && currentShelf.length > 0) {
           newShelves.push(currentShelf);
           currentShelf = [book];
           currentWidth = thickness;
         } else {
-          // Otherwise, keep adding to the current shelf
           currentShelf.push(book);
           currentWidth += thickness;
         }
       });
 
-      // Push the final partially-filled shelf
-      if (currentShelf.length > 0) {
-        newShelves.push(currentShelf);
-      }
-
+      if (currentShelf.length > 0) newShelves.push(currentShelf);
       setShelves(newShelves);
     };
 

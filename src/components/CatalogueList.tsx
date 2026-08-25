@@ -115,6 +115,18 @@ export default function CatalogueList({ catalogue, onDelete, onUpdate, uniqueLoc
                   {book.edition && <span style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '4px', fontSize: '12px' }}>{book.edition}</span>}
                   <span style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '4px', fontSize: '12px' }}>{book.printRun} Print</span>
                   {book.company && <span style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '4px', fontSize: '12px' }}>{book.company}</span>}
+                  
+                  {/* RESTORED: Wet & Digital Signatures for Card View */}
+                  {book.isSigned && (
+                    <span style={{ background: 'linear-gradient(135deg, #FFDF00 0%, #D4AF37 100%)', color: '#000', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', textShadow: '0 1px 1px rgba(255,255,255,0.5)' }}>
+                      Wet Signed ✓
+                    </span>
+                  )}
+                  {book.isDigitalSigned && (
+                    <span style={{ background: 'linear-gradient(135deg, #E0E0E0 0%, #BDBDBD 100%)', color: '#333', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', border: '1px solid #aaa' }}>
+                      Digital Signed ✓
+                    </span>
+                  )}
                 </div>
                 <div style={{ display: 'flex', gap: '15px', margin: '8px 0', fontSize: '13px', color: '#ccc' }}>
                   {book.purchasePrice && <span><strong>Price:</strong> ${book.purchasePrice}</span>}

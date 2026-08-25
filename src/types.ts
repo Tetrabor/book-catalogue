@@ -13,6 +13,7 @@ export interface SavedBook {
   copiesOwned: number;
   purchaseLocation: string;
   dateAdded: string;
+  series?: string; // NEW FIELD
 }
 
 export interface UserProfile {

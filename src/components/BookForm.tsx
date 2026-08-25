@@ -25,7 +25,7 @@ export default function BookForm({ selectedBook, scannedIsbn, uniqueLocations, u
   const [purchasePrice, setPurchasePrice] = useState(initialData?.purchasePrice || '');
   const [copiesOwned, setCopiesOwned] = useState<number>(initialData?.copiesOwned || 1);
   const [purchaseLocation, setPurchaseLocation] = useState(initialData?.purchaseLocation || '');
-  
+  const [series, setSeries] = useState(initialData?.series || '');
   const [currentCoverUrl, setCurrentCoverUrl] = useState<string | undefined>(initialData?.coverUrl || selectedBook.coverUrl);
   const [isChangingCover, setIsChangingCover] = useState(false);
 
@@ -41,7 +41,7 @@ export default function BookForm({ selectedBook, scannedIsbn, uniqueLocations, u
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave({ title, author, isbn: isbn || 'N/A', coverUrl: currentCoverUrl, edition, printRun, company, isSigned, isDigitalSigned, purchasePrice, copiesOwned, purchaseLocation });
+    onSave({ title, author, isbn: isbn || 'N/A', coverUrl: currentCoverUrl, edition, printRun, series, company, isSigned, isDigitalSigned, purchasePrice, copiesOwned, purchaseLocation });
   };
 
   const handleCoverUpdate = (newUrl: string) => { setCurrentCoverUrl(newUrl); setIsChangingCover(false); };
@@ -107,7 +107,16 @@ export default function BookForm({ selectedBook, scannedIsbn, uniqueLocations, u
           <input type="number" min="1" value={copiesOwned} onChange={(e) => setCopiesOwned(parseInt(e.target.value))} style={inputStyle} />
         </div>
       </div>
-
+      <div>
+        <label style={labelStyle}>Series / Collection (Optional):</label>
+        <input 
+          type="text" 
+          value={series} 
+          onChange={(e) => setSeries(e.target.value)} 
+          placeholder="e.g. Harry Potter, The Cosmere" 
+          style={inputStyle} 
+        />
+      </div>
       <div>
         <label style={labelStyle}>Edition:</label>
         <input type="text" value={edition} onChange={(e) => setEdition(e.target.value)} style={inputStyle} />

@@ -123,7 +123,8 @@ export function useGoogleSync(
             dateAdded: row[8] || new Date().toLocaleDateString(),
             isDigitalSigned: row[9] === 'Yes',
             purchasePrice: row[10] || '',
-            copiesOwned: parseInt(row[11]) || 1
+            copiesOwned: parseInt(row[11]) || 1,
+            series: row[14] || undefined // NEW
           }));
           setCatalogue(fetchedBooks);
         } else {
@@ -155,24 +156,18 @@ export function useGoogleSync(
         method: "POST", headers: { Authorization: `Bearer ${activeToken}` } 
       });
 
-      const headers = ["Title", "Author", "ISBN", "Edition", "Print Run", "Company", "Wet Signed", "Location", "Date Added", "Digital Signed", "Price", "Copies", "LastModified", ts.toString()];
+      // Shift ts to index 15, and insert Series at index 14
+      const headers = ["Title", "Author", "ISBN", "Edition", "Print Run", "Company", "Wet Signed", "Location", "Date Added", "Digital Signed", "Price", "Copies", "LastModified", ts.toString(), "Series"];
       const values = [headers];
 
       cat.forEach(book => {
-        // FIX: Added ultra-safe fallbacks for every single property so older data schemas never crash the app
         values.push([
-          book.title || '', 
-          book.author || '', 
-          book.isbn || 'N/A', 
-          book.edition || '', 
-          book.printRun || '1st', 
-          book.company || '', 
-          book.isSigned ? "Yes" : "No", 
-          book.purchaseLocation || '', 
-          book.dateAdded || new Date().toLocaleDateString(),
-          book.isDigitalSigned ? "Yes" : "No", 
-          book.purchasePrice || '', 
-          String(book.copiesOwned || 1) // The critical fix
+          book.title || '', book.author || '', book.isbn || 'N/A', 
+          book.edition || '', book.printRun || '1st', book.company || '', 
+          book.isSigned ? "Yes" : "No", book.purchaseLocation || '', book.dateAdded || new Date().toLocaleDateString(),
+          book.isDigitalSigned ? "Yes" : "No", book.purchasePrice || '', String(book.copiesOwned || 1),
+          '', '', // Fill columns 12 and 13 so they stay properly aligned
+          book.series || '' // NEW field safely saved to Column O
         ]);
       });
 

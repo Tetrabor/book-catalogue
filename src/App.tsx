@@ -11,10 +11,16 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'add' | 'catalogue'>('add');
   const [inputMode, setInputMode] = useState<'scanner' | 'manual'>('scanner');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [scannedIsbn, setScannedIsbn] = useState<string | null>(null);
   const [selectedBook, setSelectedBook] = useState<{ title: string; author: string; coverUrl?: string } | null>(null);
   const [activeBookId, setActiveBookId] = useState<string | null>(null);
+
+  // RESTORED: Search state variables
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const [catalogue, setCatalogue] = useState<SavedBook[]>(() => {
     const saved = localStorage.getItem('personal_book_catalogue');
@@ -43,6 +49,7 @@ export default function App() {
   const handleDeleteBook = (id: string) => updateCatalogueAndSync(catalogue.filter(b => b.id !== id));
 
   const fetchBookDetails = async (isbn: string) => {
+    setIsLoading(true); setError(null);
     try {
       const response = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`);
       const data = await response.json();
@@ -50,37 +57,52 @@ export default function App() {
         const item = data[`ISBN:${isbn}`];
         setSelectedBook({ title: item.title, author: item.authors ? item.authors.map((a:any) => a.name).join(', ') : 'Unknown Author', coverUrl: item.cover?.medium });
       } else {
-        setSelectedBook({ title: "Unknown Book", author: "Unknown Author" });
+        setError("Book not found. Try manual search.");
       }
     } catch (err) { 
-      console.error("Network error fetching details.", err); 
+      setError("Network error fetching details."); 
+    } finally {
+      setIsLoading(false);
     }
   };
 
+  // RESTORED: Fetch up to 5 results and populate the list
   const handleManualSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery.trim()) return;
+    
+    setIsLoading(true); 
+    setError(null); 
+    setSearchResults([]);
+    
     try {
-      const response = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(searchQuery)}&limit=1`);
+      const response = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(searchQuery)}&limit=5`);
       const data = await response.json();
       if (data.docs && data.docs.length > 0) {
-        const book = data.docs[0];
-        setSelectedBook({ 
-          title: book.title, 
-          author: book.author_name ? book.author_name.join(', ') : 'Unknown Author', 
-          coverUrl: book.cover_i ? `https://covers.openlibrary.org/b/id/${book.cover_i}-M.jpg` : undefined 
-        });
-        setScannedIsbn(book.isbn ? book.isbn[0] : 'N/A');
-        setSearchQuery('');
+        setSearchResults(data.docs);
       } else {
-        alert("No matching books found.");
+        setError("No matching books found.");
       }
     } catch (err) { 
-      console.error("Network error.", err); 
+      setError("Network error."); 
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const resetForm = () => { setScannedIsbn(null); setSelectedBook(null); setSearchQuery(''); };
+  // RESTORED: Allow the user to click a specific result
+  const selectSearchResult = (book: any) => {
+    setSelectedBook({ 
+      title: book.title, 
+      author: book.author_name ? book.author_name.join(', ') : 'Unknown', 
+      coverUrl: book.cover_i ? `https://covers.openlibrary.org/b/id/${book.cover_i}-M.jpg` : undefined 
+    });
+    setScannedIsbn(book.isbn ? book.isbn[0] : 'N/A');
+    setSearchResults([]); 
+    setSearchQuery('');
+  };
+
+  const resetForm = () => { setScannedIsbn(null); setSelectedBook(null); setSearchQuery(''); setSearchResults([]); setError(null); };
 
   const handleExportCSV = () => {
     if (catalogue.length === 0) return;
@@ -145,6 +167,36 @@ export default function App() {
                     <button type="submit" style={{ padding: '12px', fontSize: '16px', background: '#007bff', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Search Open Library</button>
                   </form>
                 )
+              )}
+
+              {/* RESTORED: Loading, Error, and Search Results List */}
+              <div style={{ textAlign: 'center', marginTop: '10px' }}>
+                {isLoading && <p style={{ fontWeight: 'bold', color: '#4da3ff' }}>Searching...</p>}
+                {error && <p style={{ color: '#ff6b6b', fontWeight: 'bold' }}>{error}</p>}
+              </div>
+
+              {searchResults.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '15px' }}>
+                  {searchResults.map((book, idx) => (
+                    <div 
+                      key={idx} 
+                      onClick={() => selectSearchResult(book)} 
+                      style={{ 
+                        border: '1px solid rgba(255,255,255,0.1)', 
+                        padding: '12px', 
+                        borderRadius: '4px', 
+                        cursor: 'pointer', 
+                        backgroundColor: 'rgba(0,0,0,0.3)',
+                        transition: 'background-color 0.2s'
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.5)'}
+                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.3)'}
+                    >
+                      <strong style={{ display: 'block', marginBottom: '4px', color: '#fff' }}>{book.title}</strong>
+                      <span style={{ fontSize: '14px', color: '#aaa' }}>{book.author_name ? book.author_name.join(', ') : 'Unknown Author'}</span>
+                    </div>
+                  ))}
+                </div>
               )}
 
               {selectedBook && (
