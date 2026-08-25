@@ -12,13 +12,12 @@ export default function ShelfRow({ books, activeBookId }: Props) {
       display: 'flex',
       alignItems: 'flex-end',
       justifyContent: 'flex-start',
-      
-      // NEW: 3 shelves fit perfectly on any screen
       height: '33vh', 
       minHeight: '220px', 
       
-      borderBottom: '12px solid #4a3320', 
-      boxShadow: '0 4px 6px rgba(0,0,0,0.4)',
+      // Changed to a very dark navy/black for the shelf lip
+      borderBottom: '16px solid #111A26', 
+      boxShadow: '0 6px 12px rgba(0,0,0,0.6)',
       
       padding: '0 20px',
       gap: '2px', 
@@ -28,11 +27,11 @@ export default function ShelfRow({ books, activeBookId }: Props) {
       
       <div style={{
         position: 'absolute', 
-        bottom: '12px', 
+        bottom: '16px', 
         left: 0, 
         right: 0, 
-        height: '40px', // Taller shadow for the taller shelves
-        background: 'linear-gradient(to top, rgba(0,0,0,0.25), transparent)', 
+        height: '50px',
+        background: 'linear-gradient(to top, rgba(0,0,0,0.6), transparent)', 
         zIndex: 0
       }} />
 
@@ -43,7 +42,6 @@ export default function ShelfRow({ books, activeBookId }: Props) {
           isActive={activeBookId === book.id} 
         />
       ))}
-      
     </div>
   );
 }

@@ -17,8 +17,6 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedBook, setSelectedBook] = useState<{ title: string; author: string; coverUrl?: string } | null>(null);
-
-  // NEW: Triggers the bookshelf animations
   const [activeBookId, setActiveBookId] = useState<string | null>(null);
 
   const [catalogue, setCatalogue] = useState<SavedBook[]>(() => {
@@ -29,7 +27,6 @@ export default function App() {
   useEffect(() => localStorage.setItem('personal_book_catalogue', JSON.stringify(catalogue)), [catalogue]);
 
   const uniqueLocations = Array.from(new Set(catalogue.map(b => b.purchaseLocation).filter(Boolean)));
-  
   const { googleToken, sheetId, syncStatus, userProfile, login, handleLogout, forcePushToCloud, uploadCustomCover } = useGoogleSync(catalogue, setCatalogue);
 
   const updateCatalogueAndSync = (newCatalogue: SavedBook[]) => {
@@ -45,13 +42,8 @@ export default function App() {
     resetForm(); setActiveTab('catalogue');
   };
 
-  const handleUpdateBook = (updatedBook: SavedBook) => {
-    updateCatalogueAndSync(catalogue.map(b => b.id === updatedBook.id ? updatedBook : b));
-  };
-
-  const handleDeleteBook = (id: string) => {
-    updateCatalogueAndSync(catalogue.filter(b => b.id !== id));
-  };
+  const handleUpdateBook = (updatedBook: SavedBook) => updateCatalogueAndSync(catalogue.map(b => b.id === updatedBook.id ? updatedBook : b));
+  const handleDeleteBook = (id: string) => updateCatalogueAndSync(catalogue.filter(b => b.id !== id));
 
   const fetchBookDetails = async (isbn: string) => {
     setIsLoading(true); setError(null);
@@ -93,48 +85,48 @@ export default function App() {
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
-  // Glassmorphism standard style for UI boxes
-  const glassStyle = {
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    backdropFilter: 'blur(10px)',
+  // NEW: Dark Mode Glassmorphism
+  const glassStyle: React.CSSProperties = {
+    backgroundColor: 'rgba(29, 42, 58, 0.80)', // Dark Theme Billy Blue
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
     borderRadius: '8px',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+    boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+    border: '1px solid rgba(255,255,255,0.1)',
+    color: '#ffffff'
   };
 
   return (
     <div style={{ fontFamily: 'sans-serif', minHeight: '100vh', position: 'relative' }}>
-      
-      {/* THE VIRTUAL BACKGROUND ENGINE */}
       <VirtualBookshelf catalogue={catalogue} activeBookId={activeBookId} />
-
       <SidebarMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} userProfile={userProfile} syncStatus={syncStatus} sheetId={sheetId} googleToken={googleToken} onLogin={() => login()} onLogout={handleLogout} onExport={handleExportCSV} />
 
-      {/* Main Content Wrapper - Limited to 600px width so the bookshelf sticks out the sides on Desktop! */}
       <div style={{ maxWidth: '600px', margin: '0 auto' }}>
         
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 20px', backgroundColor: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(10px)', borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
-          <button onClick={() => setIsMenuOpen(true)} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', padding: '5px' }}>☰</button>
-          <h1 style={{ margin: 0, fontSize: '20px' }}>Book Catalogue</h1>
-          <div style={{ width: '32px', height: '32px' }}>{userProfile && <img src={userProfile.picture} alt="Profile" style={{ width: '32px', height: '32px', borderRadius: '50%' }} />}</div>
+        {/* NEW: Compact Dark Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 15px', backgroundColor: 'rgba(29, 42, 58, 0.95)', backdropFilter: 'blur(10px)', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}>
+          <button onClick={() => setIsMenuOpen(true)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', padding: '4px', color: '#fff' }}>☰</button>
+          <h1 style={{ margin: 0, fontSize: '18px', letterSpacing: '0.5px' }}>Book Catalogue</h1>
+          <div style={{ width: '30px', height: '30px' }}>{userProfile && <img src={userProfile.picture} alt="Profile" style={{ width: '30px', height: '30px', borderRadius: '50%' }} />}</div>
         </div>
 
         {!googleToken && userProfile && (
-          <div style={{ backgroundColor: 'rgba(255, 243, 205, 0.95)', color: '#856404', padding: '10px', textAlign: 'center', fontSize: '13px', cursor: 'pointer' }} onClick={() => login()}>
+          <div style={{ backgroundColor: 'rgba(33, 49, 68, 0.9)', color: '#ffc107', padding: '8px', textAlign: 'center', fontSize: '13px', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.1)' }} onClick={() => login()}>
             <strong>Session Expired:</strong> Click here to reconnect to Google Sync.
           </div>
         )}
 
         <div style={{ padding: '20px' }}>
           <div style={{ display: 'flex', marginBottom: '20px', ...glassStyle, padding: '5px' }}>
-            <button onClick={() => setActiveTab('add')} style={{ flex: 1, padding: '12px', border: 'none', background: activeTab === 'add' ? '#007bff' : 'transparent', color: activeTab === 'add' ? '#fff' : '#333', fontWeight: 'bold', borderRadius: '4px', cursor: 'pointer' }}>Add Book</button>
-            <button onClick={() => setActiveTab('catalogue')} style={{ flex: 1, padding: '12px', border: 'none', background: activeTab === 'catalogue' ? '#007bff' : 'transparent', color: activeTab === 'catalogue' ? '#fff' : '#333', fontWeight: 'bold', borderRadius: '4px', cursor: 'pointer' }}>My Catalogue ({catalogue.length})</button>
+            <button onClick={() => setActiveTab('add')} style={{ flex: 1, padding: '10px', border: 'none', background: activeTab === 'add' ? '#007bff' : 'transparent', color: activeTab === 'add' ? '#fff' : '#aaa', fontWeight: 'bold', borderRadius: '4px', cursor: 'pointer' }}>Add Book</button>
+            <button onClick={() => setActiveTab('catalogue')} style={{ flex: 1, padding: '10px', border: 'none', background: activeTab === 'catalogue' ? '#007bff' : 'transparent', color: activeTab === 'catalogue' ? '#fff' : '#aaa', fontWeight: 'bold', borderRadius: '4px', cursor: 'pointer' }}>My Catalogue ({catalogue.length})</button>
           </div>
 
           {activeTab === 'add' && (
             <div style={{ ...glassStyle, padding: '20px' }}>
               {!selectedBook && (
                 <div style={{ textAlign: 'center', marginBottom: '15px' }}>
-                  <button onClick={() => setInputMode(inputMode === 'scanner' ? 'manual' : 'scanner')} style={{ padding: '8px 16px', cursor: 'pointer', border: '1px solid #ccc', borderRadius: '4px', background: '#fff' }}>Switch to {inputMode === 'scanner' ? 'Manual Search' : 'Barcode Scanner'}</button>
+                  <button onClick={() => setInputMode(inputMode === 'scanner' ? 'manual' : 'scanner')} style={{ padding: '8px 16px', cursor: 'pointer', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '4px', background: 'rgba(0,0,0,0.2)', color: '#fff' }}>Switch to {inputMode === 'scanner' ? 'Manual Search' : 'Barcode Scanner'}</button>
                 </div>
               )}
 
@@ -143,25 +135,10 @@ export default function App() {
                   <div><p style={{ textAlign: 'center' }}>Scan a book's ISBN barcode</p><Scanner onScanSuccess={(isbn) => { setScannedIsbn(isbn); fetchBookDetails(isbn); }} /></div>
                 ) : (
                   <form onSubmit={handleManualSearch} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search by Title, Author, or ISBN..." style={{ padding: '12px', fontSize: '16px', border: '1px solid #ccc', borderRadius: '4px' }} required />
+                    <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search by Title, Author, or ISBN..." style={{ padding: '12px', fontSize: '16px', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '4px', background: 'rgba(0,0,0,0.2)', color: '#fff' }} required />
                     <button type="submit" style={{ padding: '12px', fontSize: '16px', background: '#007bff', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Search Open Library</button>
                   </form>
                 )
-              )}
-
-              <div style={{ textAlign: 'center', marginTop: '10px' }}>
-                {isLoading && <p style={{ fontWeight: 'bold' }}>Searching...</p>}
-                {error && <p style={{ color: 'red', fontWeight: 'bold' }}>{error}</p>}
-              </div>
-
-              {searchResults.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '15px' }}>
-                  {searchResults.map((book, idx) => (
-                    <div key={idx} onClick={() => selectSearchResult(book)} style={{ border: '1px solid #ccc', padding: '10px', borderRadius: '4px', cursor: 'pointer', backgroundColor: '#f9f9f9' }}>
-                      <strong>{book.title}</strong><p style={{ margin: '4px 0', fontSize: '14px', color: '#555' }}>{book.author_name ? book.author_name.join(', ') : 'Unknown Author'}</p>
-                    </div>
-                  ))}
-                </div>
               )}
 
               {selectedBook && (
@@ -171,14 +148,7 @@ export default function App() {
           )}
 
           {activeTab === 'catalogue' && (
-            <CatalogueList 
-              catalogue={catalogue} 
-              onDelete={handleDeleteBook} 
-              onUpdate={handleUpdateBook} 
-              uniqueLocations={uniqueLocations} 
-              uploadCustomCover={uploadCustomCover} 
-              setActiveBookId={setActiveBookId} // PASSING THE HOOK DOWN!
-            />
+            <CatalogueList catalogue={catalogue} onDelete={handleDeleteBook} onUpdate={handleUpdateBook} uniqueLocations={uniqueLocations} uploadCustomCover={uploadCustomCover} setActiveBookId={setActiveBookId} />
           )}
         </div>
       </div>
